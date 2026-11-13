@@ -1,0 +1,19 @@
+# Local dataset, model weights, and generated experiment artifacts
+/train+public_test/
+/train+public_test.zip
+/results/
+/saved_models/
+/release_adapter/
+
+# Local runtime, IDE, and molab pairing files
+/.venv/
+/.idea/
+/.marimo-pair-*
+/__marimo__/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+
+# Local handoff with notebook URLs and machine-specific paths
+/TODO.md

@@ -1,0 +1,15 @@
+**
+!Dockerfile
+!release_adapter/
+release_adapter/**
+!release_adapter/adapter_config.json
+!release_adapter/adapter_model.safetensors
+!requirements.txt
+!lifemate_baseline.py
+!predict.py
+!predict.sh
+!start_jupyter.sh
+!predict_notebook.ipynb
+!training_code/
+!training_code/README.md
+!training_code/fetch_models.py
