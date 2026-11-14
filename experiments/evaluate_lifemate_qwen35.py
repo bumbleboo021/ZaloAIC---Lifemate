@@ -1,6 +1,7 @@
 """Run Qwen3.5 via local vLLM with the released PhoWhisper and LifeMate ToolEnv."""
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -169,32 +170,26 @@ def run(args, url):
     write_json(args.output / "summary.json", {k: v for k, v in report.items() if k != "details"})
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("data-root", "agent", "asr", "output"):
-        parser.add_argument(f"--{name}", type=Path, required=True)
-    parser.add_argument("--stage", required=True, choices=("smoke", "pilot", "development", "public"))
-    parser.add_argument("--port", type=int, default=18083)
-    args = parser.parse_args()
-    os.umask(0o077)
-    args.output.mkdir(parents=True)
+@contextmanager
+def serving_agent(agent, server_log, *, port=18083, gpu_memory_utilization=0.60):
     os.environ.update(USE_TF="0", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
                       VLLM_NO_USAGE_STATS="1", VLLM_USE_FLASHINFER_SAMPLER="0")
-    url = f"http://127.0.0.1:{args.port}"
+    url = f"http://127.0.0.1:{port}"
     command = [
-        str(Path(sys.executable).with_name("vllm")), "serve", str(args.agent),
-        "--served-model-name", "lifemate-agent", "--host", "127.0.0.1", "--port", str(args.port),
+        str(Path(sys.executable).with_name("vllm")), "serve", str(agent),
+        "--served-model-name", "lifemate-agent", "--host", "127.0.0.1", "--port", str(port),
         "--max-model-len", str(CONTEXT_LIMIT), "--language-model-only", "--reasoning-parser", "qwen3",
         "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_coder",
-        "--gpu-memory-utilization", "0.60", "--max-num-seqs", "1", "--enforce-eager",
+        "--gpu-memory-utilization", str(gpu_memory_utilization), "--max-num-seqs", "1", "--enforce-eager",
     ]
-    with (args.output / "server.log").open("x", encoding="utf-8") as log:
+    with server_log.open("w", encoding="utf-8") as log:
         server = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
+        ready = False
         try:
             deadline = monotonic() + 600
             while monotonic() < deadline:
                 if server.poll() is not None:
-                    raise RuntimeError(f"vLLM exited. See {log.name}")
+                    raise RuntimeError(f"vLLM exited with code {server.returncode}. See {log.name}")
                 try:
                     api(url, "/v1/models")
                 except (OSError, URLError):
@@ -215,7 +210,19 @@ def main():
                 "temperature": 0, "chat_template_kwargs": {"enable_thinking": False},
             }, timeout=240)
             print("QWEN35_WARMUP_READY", flush=True)
-            run(args, url)
+            ready = True
+            yield url
+        except Exception:
+            if not ready:
+                try:
+                    with server_log.open("rb") as failure_log:
+                        failure_log.seek(max(0, server_log.stat().st_size - 16384))
+                        tail = failure_log.read().decode("utf-8", errors="replace").strip()
+                    if tail:
+                        print(f"vLLM startup log ({server_log}):\n{tail}", file=sys.stderr, flush=True)
+                except OSError as error:
+                    print(f"Could not read vLLM log: {error}", file=sys.stderr, flush=True)
+            raise
         finally:
             if server.poll() is None:
                 server.terminate()
@@ -224,6 +231,19 @@ def main():
                 except subprocess.TimeoutExpired:
                     server.kill()
                     server.wait()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ("data-root", "agent", "asr", "output"):
+        parser.add_argument(f"--{name}", type=Path, required=True)
+    parser.add_argument("--stage", required=True, choices=("smoke", "pilot", "development", "public"))
+    parser.add_argument("--port", type=int, default=18083)
+    args = parser.parse_args()
+    os.umask(0o077)
+    args.output.mkdir(parents=True)
+    with serving_agent(args.agent, args.output / "server.log", port=args.port) as url:
+        run(args, url)
     print("QWEN35_STAGE_READY", args.stage, flush=True)
 
 

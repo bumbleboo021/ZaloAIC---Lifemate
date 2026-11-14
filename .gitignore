@@ -17,3 +17,27 @@ __pycache__/
 
 # Local handoff with notebook URLs and machine-specific paths
 /TODO.md
+
+# Frozen judge inference weights
+/judge_step150/staged_models/
+
+# Organizer-provided material and locally rendered overview previews
+/Docker_Guide_ZAC2026_LifeMate.pdf
+/docs/lifemate_overview.pdf
+/docs/lifemate_overview.png
+
+# Generated model bundles, predictions, archives, and logs
+/judge_qwen35/staged_models/
+/judge_qwen35/weights/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.jsonl
+*.zip
+*.tar
+*.tar.gz
+*.partial
+*.log
+.ipynb_checkpoints/

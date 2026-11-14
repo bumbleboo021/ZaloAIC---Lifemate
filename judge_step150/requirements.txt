@@ -1,0 +1,8 @@
+vllm==0.23.0
+torch==2.11.0
+transformers==4.57.1
+scipy==1.18.1
+soundfile==0.14.0
+ninja==1.13.2
+jupyterlab==4.4.10
+ipykernel==6.30.1

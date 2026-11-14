@@ -1,0 +1,16 @@
+# LifeMate training reproduction
+
+Use the [official LifeMate TRAIN kit](https://challenge.zalo.ai/portal/lifemate) under the competition's registered-team access. The approved archive used on Molab was [train+public_test.zip](https://huggingface.co/datasets/onehcmuss/zaic26lifemate/resolve/main/train%2Bpublic_test.zip). Public data is used for predictions. Obtain the official tool simulator with the kit.
+
+| Component | Base model revision |
+| --- | --- |
+| Qwen3.5-4B | [851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a](https://huggingface.co/Qwen/Qwen3.5-4B/tree/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a) |
+| PhoWhisper-medium | [55a7e3eb6c906de891f8f06a107754427dd3be79](https://huggingface.co/vinai/PhoWhisper-medium/tree/55a7e3eb6c906de891f8f06a107754427dd3be79) |
+
+Qwen3.5 uses assistant-only next-action and finish supervision on official traces. The trainer uses seed 42, rank 16, alpha 32, dropout 0.05, learning rate 1e-4, and effective batch size 8. The Qwen3.5 adapter targets language-model q/v and linear-attention qkv projections. PhoWhisper used one epoch of ASR LoRA on reference transcripts for the 1,158 fitting requests with the Qwen3.5 training exclusions held fixed. Shared ASR defaults are defined in `train_lifemate_asr_lora.py`.
+
+For step 548, prepare the targets with `python -m training_code.prepare_lifemate_sft --data-root KIT --output fitting.private.jsonl` (3,801 targets). Use `train_lifemate_lora.py --model-family qwen35`. The first 72 updates produced the initial adapter. The next segment restarted the optimizer from that adapter, trained 78 updates, then resumed its trainer state to complete 476 updates in that segment. The final optimizer checkpoint is `checkpoint-476` (cumulative label 548). The continuation launcher records the exact checkpoint layout and arguments. Use the archived exact adapter for byte-verified reconstruction, since the initial segment and resumed learning-rate schedules are separate.
+
+For the full-TRAIN candidate, run `python -m experiments.run_lifemate_qwen35_full_train --root RECOVERY --archive-url ARCHIVE_URL --hf-prefix RUN_PREFIX --fast` in the Molab source directory. The runner initializes the step-548 adapter with a fresh optimizer and trains one pass on all 5,086 targets. It uses Transformers 5.22.2, PyTorch 2.11.0+cu130, PEFT, and the verified Flash Linear Attention and causal-conv1d extensions. See the runner for the checkpoint paths and arguments. Development and holdout IDs are fitting inputs only for this candidate.
+
+For either candidate, the training recovery artifacts are in the team's [private Hugging Face dataset](https://huggingface.co/datasets/bumbleboonq/zaic-lifemate). Arrange organizer read access through the team's private submission channel. The step-548 recovery archive is `qwen35-milestones/20261113T171333Z/qwen35-step548.zip`. Full-TRAIN artifacts use `qwen35-full-train/from-step548/`. Merge the selected agent adapter into the pinned base with `training_code.merge_lifemate_qwen35`. The ASR merge uses the epoch-one adapter and pinned PhoWhisper base. Verify the produced inference files against `/code/release.json`. The Docker package includes only the merged inference models and training code. Keep raw competition data and credentials in authorized storage.

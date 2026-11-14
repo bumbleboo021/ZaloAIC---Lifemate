@@ -3,11 +3,13 @@
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path
 import time
 
 os.environ["USE_TF"] = "0"
-os.environ["HF_HUB_OFFLINE"] = "1"
+if not os.environ.get("LIFEMATE_HF_BACKUP_REPO"):
+    os.environ["HF_HUB_OFFLINE"] = "1"
 
 
 def encode(tokenizer, example, limit):
@@ -34,6 +36,12 @@ def main():
     parser.add_argument("--agent", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-minutes", type=int, default=90)
+    parser.add_argument("--max-steps", type=int, default=-1,
+                        help="Cap optimizer steps, or use -1 for the epoch schedule")
+    parser.add_argument("--milestone-steps", type=int, nargs="+", default=[],
+                        help="Save these optimizer steps in a separate milestone directory")
+    parser.add_argument("--step-offset", type=int, default=0,
+                        help="Earlier updates to add to milestone names and metrics")
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--init-adapter", type=Path, help="Start with adapter weights and a fresh optimizer")
     parser.add_argument("--max-sequence-tokens", type=int, default=12288)
@@ -41,6 +49,10 @@ def main():
     args = parser.parse_args()
     if args.resume and args.init_adapter:
         parser.error("Choose either --resume or --init-adapter.")
+    if args.max_steps != -1 and args.max_steps < 1:
+        parser.error("--max-steps must be positive or -1.")
+    if args.step_offset < 0 or any(step <= args.step_offset for step in args.milestone_steps):
+        parser.error("Milestones must be greater than the non-negative step offset.")
     if args.max_minutes < 1:
         parser.error("--max-minutes must be positive")
     if not 1 <= args.max_sequence_tokens <= 16384:
@@ -91,8 +103,35 @@ def main():
     model.print_trainable_parameters()
     deadline = time.monotonic() + args.max_minutes * 60
 
-    class StopAfterBudget(TrainerCallback):
-        def on_step_end(self, args, state, control, **kwargs):
+    milestones = set(args.milestone_steps)
+    backup = None
+    if backup_repo := os.environ.get("LIFEMATE_HF_BACKUP_REPO"):
+        from training_code.backup_lifemate_checkpoint import CheckpointBackup
+        backup = CheckpointBackup(backup_repo, os.environ["LIFEMATE_HF_BACKUP_RUN"])
+
+    class SaveMilestonesAndStopAfterBudget(TrainerCallback):
+        def on_save(self, settings, state, control, **kwargs):
+            cumulative_step = state.global_step + args.step_offset
+            checkpoint = args.output / f"checkpoint-{state.global_step}"
+            if backup is not None:
+                backup.save_checkpoint(checkpoint, cumulative_step)
+            if milestones and (cumulative_step in milestones or state.global_step >= state.max_steps):
+                directory = args.output / "milestones"
+                directory.mkdir(exist_ok=True)
+                destination = directory / f"checkpoint-{cumulative_step}"
+                if not destination.exists():
+                    pending = directory / f".checkpoint-{cumulative_step}.partial"
+                    shutil.copytree(checkpoint, pending)
+                    pending.rename(destination)
+                print(f"MILESTONE_READY {cumulative_step}", flush=True)
+            return control
+
+        def on_step_end(self, settings, state, control, **kwargs):
+            if milestones and (
+                state.global_step + args.step_offset in milestones
+                or state.global_step >= state.max_steps
+            ):
+                control.should_save = True
             if time.monotonic() >= deadline:
                 print(f"Time budget reached at optimizer step {state.global_step}", flush=True)
                 control.should_save = True
@@ -100,9 +139,12 @@ def main():
             return control
 
     optimizer_steps = (len(encoded) + 7) // 8
+    if args.max_steps > 0:
+        optimizer_steps = args.max_steps
     warmup_steps = max(1, (3 * optimizer_steps + 99) // 100)
     settings = TrainingArguments(
-        output_dir=str(args.output), num_train_epochs=1, learning_rate=1e-4, warmup_steps=warmup_steps,
+        output_dir=str(args.output), num_train_epochs=1, max_steps=args.max_steps,
+        learning_rate=1e-4, warmup_steps=warmup_steps,
         per_device_train_batch_size=1, gradient_accumulation_steps=8, bf16=True,
         gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False},
         save_steps=10, save_total_limit=3, logging_steps=1, report_to=[], seed=42,
@@ -110,10 +152,14 @@ def main():
     )
     trainer = Trainer(model=model, args=settings, train_dataset=encoded, processing_class=tokenizer,
                       data_collator=DataCollatorForSeq2Seq(tokenizer, pad_to_multiple_of=8),
-                      callbacks=[StopAfterBudget()])
+                      callbacks=[SaveMilestonesAndStopAfterBudget()])
     result = trainer.train(resume_from_checkpoint=str(args.resume) if args.resume else None)
     trainer.save_model(str(args.output / "adapter"))
-    (args.output / "training_metrics.json").write_text(json.dumps(result.metrics, indent=2) + "\n", encoding="utf-8")
+    metrics = dict(result.metrics, optimizer_steps=trainer.state.global_step,
+                   cumulative_updates=args.step_offset + trainer.state.global_step)
+    (args.output / "training_metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+    if backup is not None:
+        backup.save_metrics(args.output / "training_metrics.json", metrics["cumulative_updates"])
     print("ADAPTER_READY", flush=True)
 
 
