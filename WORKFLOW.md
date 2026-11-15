@@ -1,6 +1,6 @@
 # LifeMate project workflow
 
-This is the record of how we took a Vietnamese voice assistant from its first public submission (**13.55**) to **38.97 reported public**. It covers the decisions behind the runs, what slowed us down, and how we worked together. See [README.md](README.md) and [TODO.md](TODO.md) for operational details.
+This is the record of how we took a Vietnamese voice assistant from its first public submission (**13.55**) to **38.97 reported public**. It covers the decisions behind the runs, what slowed us down, and how we worked together. See [AGENTS.md](AGENTS.md) for the current operational handoff.
 
 ## Starting point
 
@@ -34,7 +34,7 @@ I translated those decisions into versioned scripts, ran the GPU jobs on Molab, 
 
 For the Docker handoff, Molab stages the exact merged weights. The laptop pulls the checksum-verified files, then its local Docker Desktop daemon builds and exports the Linux image. This uses the laptop for packaging only. The judge package includes the inference entry point, timing notebook, model manifest, and training reproduction notes.
 
-## Release status at this handoff
+## Historical release status
 
 - **Step 548** remains the fallback. The Docker build started by transferring the merged weights from Molab. Check the build logs for `DOCKER_ARCHIVE_READY`.
 - **Full TRAIN** is a separate candidate. Check its Molab log for `FULL_TRAIN_PUBLIC_READY`, which marks the validated public JSONL and adapter backup. Compare its leaderboard score with step 548 before choosing the Docker image.

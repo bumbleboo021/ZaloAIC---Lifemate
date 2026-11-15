@@ -1,6 +1,6 @@
 # LifeMate · Zalo AI Challenge 2026
 
-LifeMate turns a Vietnamese voice request and its conversation history into tool calls. We improved the public score from **13.55** to **38.97 reported** by fine-tuning the tool agent, switching to tuned PhoWhisper, and training Qwen3.5 through checkpoint 548. [Project history](WORKFLOW.md) · [Workflow diagram](docs/lifemate_overview.tex)
+LifeMate turns a Vietnamese voice request and its conversation history into tool calls. We improved the public score from **13.55** to **40.72 public** by fine-tuning the tool agent, switching to tuned PhoWhisper, and training Qwen3.5 through checkpoint 1184. [Current handoff](AGENTS.md) · [Project history](WORKFLOW.md) · [Workflow diagram](docs/lifemate_overview.tex)
 
 ## What we built
 
@@ -15,14 +15,14 @@ LifeMate turns a Vietnamese voice request and its conversation history into tool
 | Qwen3.5 step 362 + tuned PhoWhisper | 36.00 | 37.80 |
 | Qwen3.5 step 548 + tuned PhoWhisper | 38.97* | **40.07** |
 
-Public scores were reported by the team. *The highest reported score was labeled step 538 in chat and the corresponding export series ends at step 548. Verify the uploaded filename before attributing 38.97 to that exact checkpoint.*
+Public scores were reported by the team. *The earlier 38.97 score was labeled step 538 in chat and the corresponding export series ends at step 548. Verify the uploaded filename before attributing 38.97 to that exact checkpoint.*
 
 A reference transcript recovered **30 of 48 selected audio failures**. Beam search and a targeted transfer prompt lost to the greedy control in the pilot. Continuing with screened ASR transcripts improved the pilot but slipped to **37.84** on development. Flash Linear Attention and causal-conv1d cut the matched 60-update training run from **39.1 to 10.9 minutes**.
 
 ## Release candidates
 
 - **Step 548** is the fallback. It completed a fitting pass over 1,158 official requests and led the fixed 232-request development comparison.
-- **Full TRAIN** starts from step 548 and adds one pass over 5,086 clean targets from all 1,545 labeled TRAIN requests. It completed 636 more updates, reaching cumulative **step 1184**. The former development and holdout rows were included in fitting, so compare this candidate using the public leaderboard.
+- **Full TRAIN** starts from step 548 and adds one pass over 5,086 clean targets from all 1,545 labeled TRAIN requests. It completed 636 more updates, reaching cumulative **step 1184** and scoring **40.72 public**. The former development and holdout rows were included in fitting, so compare this candidate using the public leaderboard.
 - The public submission is a 634-row JSONL. The separate judge submission is the frozen offline Docker image archive, with a Drive link and MD5. The timing notebook and the shell entry point share inference code. [Judge package](judge_qwen35/README.md) · [Build and upload guide](docs/submit_qwen35_judge.md)
 
 ## Repository layout

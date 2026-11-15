@@ -6,7 +6,7 @@ The build uses Molab for the merged weights and Docker Desktop's local Linux dae
 
 ## Step-548 fallback
 
-The active build logs are in `results/judge_qwen35/step548-build.log` and `results/judge_qwen35/step548-build.stderr.log`. Resume from the repository root if the build stops. Supply the active runtime URL if it changes.
+The original step-548 build logs are archived locally. See [AGENTS.md](../AGENTS.md) for the current step-1184 release. Resume from the repository root if the build stops. Supply the active runtime URL if it changes.
 
 ```powershell
 & .\judge_qwen35\build_from_molab.ps1 -RuntimeUrl 'https://sb-d9d3a5011a88b1be.sb.molab.run' -Candidate step548
